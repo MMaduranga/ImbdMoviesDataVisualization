@@ -3,7 +3,7 @@ import pandas as pd
 
 
 def read_data():
-    dataframe = pd.read_csv("C:\\Users\\MasterPC\\Downloads\\imdb_movies_0.csv")
+    dataframe = pd.read_csv("data source\\movies data.csv")
     pd.set_option('max_columns', 11)
     return dataframe
 
