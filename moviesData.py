@@ -21,7 +21,7 @@ def sidebar():
     try:
         show_actor_data(select, data)
     except Exception:
-        st.error("No internet connection")
+        pass
 
 
 def show_actor_data(select, data):
@@ -31,41 +31,59 @@ def show_actor_data(select, data):
             actor_data = j
     actor_birth = int(actor_data['birthYear'].max())
     actor_death = actor_data['deathYear'].isnull().any()
-    details, img, blank = st.columns([0.5,0.5,1])
+    details, blank = st.columns([1.5, 4.5])
     with details:
-        stc.html(f"""<h1>Actor</h1><h3>Name:{select}</h3><h3>Birth Year:{actor_birth}</h3>""")
-    img.image(search_actor(select), width=175)
+        stc.html(f"""<h1>Actor</h1><h4>Name:{select}</h4><h4>Birth Year:{actor_birth}</h4>""")
+    try:
+        details.image(search_actor(select), width=175)
+    except Exception:
+        details.write("Network Faild")
     if not actor_death:
         st.write(f"Death Year:{int(actor_data['deathYear'].max())}")
+    with blank:
+        select = st.selectbox('Select', ['Rating', 'Popularity'])
+        if select == 'Rating':
+            actor_data = actor_data.sort_values(by='averageRating', ascending=False)
+            fig1 = px.bar(actor_data, x='originalMovieTitle', y='averageRating', color='averageRating')
+            fig1.update_layout(showlegend=False, width=900, height=450, autosize=True, legend_valign='top')
+            st.write(fig1)
+        if select == 'Popularity':
+            actor_data = actor_data.sort_values(by='numVotes', ascending=False)
+            fig1 = px.bar(actor_data, x='originalMovieTitle', y='numVotes', color='numVotes')
+            fig1.update_layout(showlegend=False, width=900, height=450, autosize=True, legend_valign='top')
+            st.write(fig1)
     actor_data = actor_data.drop(['actorName', 'deathYear', 'birthYear'], axis=1)
-    actor_data['MovieId']=[i for i in range(1,len(actor_data.index)+1)]
+    actor_data['MovieId']=[i for i in range(1, len(actor_data.index)+1)]
     actor_data = actor_data.set_index('MovieId')
-    fig1 = px.bar(actor_data, y='originalMovieTitle', x='averageRating', color='averageRating',orientation='h')
-    fig1.update_layout(showlegend=False, width=600, height=350, autosize=True, legend_valign='top')
-    blank.write(fig1)
     actor_data_year = actor_data.groupby(actor_data['startYear']).mean()
     actor_data_genre = actor_data.groupby(actor_data['genre']).mean()
     actor_data_rtime = actor_data.groupby(actor_data['runtimeMinutes']).mean()
     graph1, graph2 = st.columns(2)
-    graph = graph1.selectbox('Average rating over', ['Time','Genre','Run time'])
-    graphy = graph2.selectbox('Number of votes over', ['Time','Genre','Run time'])
-    if graph == 'Time':
+    graph = graph1.selectbox('Average rating over', ['Year','Genre','Run time'])
+    graphy = graph2.selectbox('Number of votes over', ['Genre', 'Adult or not'])
+    if graph == 'Year':
         graph1.write(actors_graphs(actor_data_year, 'averageRating'))
     if graph == 'Genre':
         graph1.write(actors_graphs(actor_data_genre, 'averageRating'))
     if graph == 'Run time':
         graph1.write(actors_graphs(actor_data_rtime, 'averageRating'))
-    if graphy == 'Time':
-        graph2.write(actors_graphs(actor_data_year, 'numVotes'))
+    if graphy == 'Adult or not':
+        actor_data['isAdult'] = actor_data['isAdult'].replace(0, 'Not Adult')
+        actor_data['isAdult'] = actor_data['isAdult'].replace(1, 'Adult')
+        graph2.write(actors_graphs_pie(actor_data, 'isAdult'))
     if graphy == 'Genre':
-        graph2.write(actors_graphs(actor_data_genre, 'numVotes'))
-    if graphy == 'Run time':
-        graph2.write(actors_graphs(actor_data_rtime, 'numVotes'))
+        graph2.write(actors_graphs_pie(actor_data, 'genre'))
 
 
 def actors_graphs(data_frame, y_axis):
     fig = px.bar(data_frame, x=data_frame.index, y=y_axis, color=y_axis)
-    fig.update_layout(showlegend=False, width=600, height=400, autosize=True)
+    fig.update_layout(showlegend=False, width=550, height=350, autosize=True)
+    return fig
+
+
+def actors_graphs_pie(data_frame, value):
+    fig = px.pie(data_frame, names=value , color_discrete_sequence=px.colors.sequential.Plasma_r)
+    fig.update_layout(showlegend=True, width=550, height=350, autosize=True)
     return fig
 
 
@@ -80,17 +98,19 @@ def search_actor(name):
     r = rq.get(url)
     sp = bs(r.text, 'html.parser')
     im = sp.findAll('img')
-    print(im)
     for i in im:
         pattern = r'https://'
         if re.match(pattern, i['src']):
             return i['src']
 
 
-def overview_of_datasheet():
+def overview_of_datasheet(dataframe):
     st.header("Overview")
     des = dataframe.describe()
     st.write(des)
+    st.write(dataframe.isnull().sum())
+    dataframe = dataframe.sort_values(by='runtimeMinutes', ascending=False)
+    st.write(dataframe)
     fig = go.Figure()
     fig.add_trace(go.Bar(x=des.columns, y=des.loc['std'], name='min',
                          marker_color='rgb(55, 83, 109)'))
@@ -99,7 +119,9 @@ def overview_of_datasheet():
     fig.update_layout(title='Overview of Datasheet', bargap=0.15,  bargroupgap=0.1)
     st.write()
     col =des.columns
-    st.plotly_chart(px.pie(des ))
+    st.plotly_chart(px.scatter(dataframe, y='runtimeMinutes', x='averageRating', color_discrete_sequence=px.colors.sequential.Plasma_r))
+    st.plotly_chart(px.box(dataframe, y='runtimeMinutes', color_discrete_sequence=px.colors.sequential.Plasma_r))
+    #st.write(dataframe)
 
 
 def main():
@@ -107,7 +129,7 @@ def main():
     if select == 'Overview of an Actor':
         sidebar()
     if select == 'Overview of Datasheet':
-        overview_of_datasheet()
+        overview_of_datasheet(dataframe)
 
 
 if __name__ == '__main__':
